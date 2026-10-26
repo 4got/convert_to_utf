@@ -300,12 +300,11 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     folder = args.folder.strip("/ ") if args.folder else None
 
     start, dirs, files = collect_paths(src, folder)
-    rel_candidates = []
-    for path in dirs + files:
-        rel = rel_posix(path, src)
-        rel_candidates.append(rel)
-        if path.is_dir():
-            rel_candidates.append(rel + "/")
+    # Only plain relative paths: git check-ignore --stdin treats a trailing-slash
+    # path as an empty basename, which can match a degenerate empty exclude
+    # pattern (e.g. a CRLF blank line in .gitignore) and falsely mark a whole
+    # directory as ignored.
+    rel_candidates = [rel_posix(path, src) for path in dirs + files]
 
     ignored = {}
     for chunk in batched(rel_candidates, GIT_BATCH):
@@ -313,13 +312,13 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
     def is_ignored(path: Path) -> bool:
         rel = rel_posix(path, src)
-        if ignored.get(rel) or ignored.get(rel + "/"):
+        if ignored.get(rel):
             return True
         for parent in path.relative_to(src).parents:
             p = parent.as_posix()
             if p == ".":
                 continue
-            if ignored.get(p) or ignored.get(p + "/"):
+            if ignored.get(p):
                 return True
         return False
 
